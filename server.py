@@ -1,4 +1,4 @@
-from flask import Flask, request, send_file, jsonify, redirect
+from flask import Flask, request, send_file, jsonify, redirect, url_for
 from openpyxl import Workbook
 import os
 
@@ -15,9 +15,26 @@ def allowed_file(filename):
         filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def adjust_column_width(sheet):
+    for col in sheet.columns:
+        max_length = 0
+        column = col[0].column_letter  # Get the column name
+        for cell in col:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except TypeError:
+                pass
+        adjusted_width = max_length + 2
+        sheet.column_dimensions[column].width = adjusted_width
+
+
 @app.route('/save_report', methods=['POST'])
 def save_report():
     data = request.json.get('data', [])
+
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
 
     # Criar um novo workbook do Excel
     wb = Workbook()
@@ -30,17 +47,27 @@ def save_report():
     for item in data:
         ws.append([item['descrição'], item['ean'], item['quantidade'], item['validade']])
 
+    # Ajustar a largura das colunas
+    adjust_column_width(ws)
+
+    # Garantir que o diretório de uploads existe
+    if not os.path.exists(UPLOAD_FOLDER):
+        os.makedirs(UPLOAD_FOLDER)
+
     # Salvar o workbook como um arquivo temporário
-    relatorio_path = 'relatorio.xlsx'
+    relatorio_path = os.path.join(UPLOAD_FOLDER, 'relatorio.xlsx')
     wb.save(relatorio_path)
 
     # Retornar o link do arquivo como uma resposta de redirecionamento
-    return redirect(f'/download/{relatorio_path}')
+    return redirect(url_for('download', filename='relatorio.xlsx'))
 
 
-@app.route('/download/<path:filename>')
+@app.route('/download/<filename>')
 def download(filename):
-    return send_file(filename, as_attachment=True)
+    try:
+        return send_file(os.path.join(app.config['UPLOAD_FOLDER'], filename), as_attachment=True)
+    except FileNotFoundError:
+        return jsonify({"error": "File not found"}), 404
 
 
 if __name__ == '__main__':

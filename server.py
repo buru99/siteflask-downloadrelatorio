@@ -1,127 +1,71 @@
-import flet as ft
-import datetime
-import requests
-import webbrowser
+from flask import Flask, request, send_file, jsonify, redirect, url_for
+from flask_cors import CORS
+from openpyxl import Workbook
+import os
 
+app = Flask(__name__)
+CORS(app)  # Habilitar CORS para todas as rotas
 
-def main(page: ft.Page):
-    page.adaptive = True
-    page.title = "Controle de Validade Digital"
-    produtos = []
+UPLOAD_FOLDER = 'uploads'
+ALLOWED_EXTENSIONS = {'xlsx'}
 
-    produtos_list_view = ft.ListView(expand=1, spacing=5, padding=20, auto_scroll=True)
-    produtos_list_view.adaptive = True
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-    def excluir_produto(index):
-        produtos.pop(index)
-        produtos_list_view.controls.pop(index)
-        page.update()
+def allowed_file(filename):
+    return '.' in filename and \
+        filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-    def limpar_tudo(e):
-        produtos.clear()
-        produtos_list_view.controls.clear()
-        page.update()
-        description.focus()
+def adjust_column_width(sheet):
+    for col in sheet.columns:
+        max_length = 0
+        column = col[0].column_letter  # Get the column name
+        for cell in col:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except TypeError:
+                pass
+        adjusted_width = max_length + 2
+        sheet.column_dimensions[column].width = adjusted_width
 
-    def adc(e):
-        description_value = description.value
-        if not description_value:
-            mostrar_snackbar("Por favor, insira uma descrição.")
-            description.focus()
-            return
+@app.route('/save_report', methods=['POST'])
+def save_report():
+    data = request.json.get('data', [])
 
-        ean_value = ean_pdt.value
-        if not ean_value:
-            mostrar_snackbar("Por favor, insira um EAN válido.")
-            ean_pdt.focus()
-            return
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
 
-        try:
-            quantidade_value = int(quantidade.value)
-        except ValueError:
-            mostrar_snackbar("Por favor, insira a quantidade.")
-            quantidade.focus()
-            return
+    # Criar um novo workbook do Excel
+    wb = Workbook()
+    ws = wb.active
 
-        data_value = data.value.strftime("%d/%m/%Y") if data.value else None
+    # Definir os cabeçalhos das colunas
+    ws.append(["Descrição", "EAN", "Quantidade", "Validade"])
 
-        produto = {
-            "descrição": description_value,
-            "ean": ean_value,
-            "quantidade": quantidade_value,
-            "validade": data_value
-        }
-        produtos.append(produto)
+    # Preencher o workbook com os dados recebidos
+    for item in data:
+        ws.append([item['descrição'], item['ean'], item['quantidade'], item['validade']])
 
-        index = len(produtos) - 1
-        produtos_list_view.controls.append(
-            ft.ListTile(
-                title=ft.Text(f"Descrição: {description_value} | EAN: {ean_value} | Quantidade: {quantidade_value} | Validade: {data_value}"),
-                trailing=ft.IconButton(
-                    icon=ft.icons.DELETE,
-                    on_click=lambda e, idx=index: excluir_produto(idx)
-                )
-            )
-        )
+    # Ajustar a largura das colunas
+    adjust_column_width(ws)
 
-        limpar_campos()
+    # Garantir que o diretório de uploads existe
+    if not os.path.exists(UPLOAD_FOLDER):
+        os.makedirs(UPLOAD_FOLDER)
 
-    def limpar_campos():
-        ean_pdt.value = ""
-        quantidade.value = ""
-        description.value = ""
-        page.update()
-        description.focus()
+    # Salvar o workbook como um arquivo temporário
+    relatorio_path = os.path.join(UPLOAD_FOLDER, 'relatorio.xlsx')
+    wb.save(relatorio_path)
 
-    def mostrar_snackbar(mensagem, erro=False):
-        page.snack_bar = ft.SnackBar(ft.Text(mensagem), bgcolor='red' if erro else None)
-        page.snack_bar.open = True
-        page.update()
+    # Retornar o link do arquivo como uma resposta de redirecionamento
+    return redirect(url_for('download', filename='relatorio.xlsx'))
 
-    def salvar_relatorio(e):
-        if not produtos:
-            mostrar_snackbar("Nenhum produto para salvar.")
-            return
+@app.route('/download/<filename>')
+def download(filename):
+    try:
+        return send_file(os.path.join(app.config['UPLOAD_FOLDER'], filename), as_attachment=True)
+    except FileNotFoundError:
+        return jsonify({"error": "File not found"}), 404
 
-        # Enviar os dados para o servidor Flask
-        url = 'https://web-production-7ce3.up.railway.app//save_report'
-        headers = {'Content-Type': 'application/json'}
-        data = {"data": produtos}
-        
-        try:
-            response = requests.post(url, json=data, headers=headers, verify=False)
-            print("Status code:", response.status_code)
-            print("Response content:", response.content)
-            if response.status_code == 200:
-                # Se a resposta foi bem-sucedida, abrir o link para fazer o download do relatório
-                link_url = response.url
-                webbrowser.open(link_url)
-            else:
-                # Se ocorreu um erro, mostrar uma mensagem de falha
-                mostrar_snackbar("Falha ao salvar o relatório.", erro=True)
-        except Exception as ex:
-            print("Error:", ex)
-            mostrar_snackbar("Erro ao enviar solicitação para o servidor.", erro=True)
-
-    description = ft.TextField(label="Descrição", autofocus=True)
-    ean_pdt = ft.TextField(label="EAN do Produto")
-    quantidade = ft.TextField(label="Quantidade")
-    data = ft.DatePicker(datetime.datetime.now())
-    enviar = ft.TextButton(icon=ft.icons.SAVE, text="Salvar relatório", on_click=salvar_relatorio)
-
-    page.bottom_appbar = ft.BottomAppBar(
-        bgcolor=ft.colors.TRANSPARENT, content=ft.Row(controls=[enviar])
-    )
-
-    adc_button = ft.FloatingActionButton("Adicionar", on_click=adc, width=100)
-    list_container = ft.Container(content=produtos_list_view, height=300, expand=True)
-    botao_data = ft.ElevatedButton("Validade do Produto", icon=ft.icons.CALENDAR_MONTH, on_click=lambda _: data.pick_date())
-    clean_button = ft.FloatingActionButton("Limpar Lista", on_click=limpar_tudo, width=100)
-
-    page.add(
-        ft.Column([description, ean_pdt, quantidade, botao_data,
-                   ft.Row([adc_button, clean_button]), list_container,
-                   ft.Container(padding=5)], expand=True)
-    )
-
-ft.app(target=main)
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))

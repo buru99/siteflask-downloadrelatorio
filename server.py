@@ -28,7 +28,7 @@ def adjust_column_width(sheet):
         adjusted_width = max_length + 2
         sheet.column_dimensions[column].width = adjusted_width
 
-@app.route('/save_report', methods=['POST'])
+@app.route('/save_report', methods=['GET'])
 def save_report():
     data = request.json.get('data', [])
 

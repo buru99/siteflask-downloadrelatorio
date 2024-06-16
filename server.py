@@ -1,4 +1,4 @@
-from flask import Flask, request, send_file, jsonify, redirect, url_for
+from flask import Flask, request, send_file, jsonify, url_for
 from flask_cors import CORS
 from openpyxl import Workbook
 import os
@@ -28,10 +28,9 @@ def adjust_column_width(sheet):
         adjusted_width = max_length + 2
         sheet.column_dimensions[column].width = adjusted_width
 
-@app.route('/save_report', methods=['POST', 'GET'])
+@app.route('/save_report', methods=['POST'])
 def save_report():
-    data = request.json.get('data', [])
-
+    data = request.json
     if not data:
         return jsonify({"error": "No data provided"}), 400
 
@@ -43,7 +42,7 @@ def save_report():
     ws.append(["Descrição", "EAN", "Quantidade", "Validade"])
 
     # Preencher o workbook com os dados recebidos
-    for item in data:
+    for item in data.get('data', []):
         ws.append([item['descrição'], item['ean'], item['quantidade'], item['validade']])
 
     # Ajustar a largura das colunas
@@ -57,8 +56,17 @@ def save_report():
     relatorio_path = os.path.join(UPLOAD_FOLDER, 'relatorio.xlsx')
     wb.save(relatorio_path)
 
-    # Retornar o link do arquivo como uma resposta de redirecionamento
-    return redirect(url_for('download', filename='relatorio.xlsx'))
+    # Log para ver se o caminho do arquivo está correto
+    app.logger.debug(f"Relatório salvo em: {relatorio_path}")
+
+    # Retornar o link do arquivo como uma resposta JSON
+    try:
+        download_url = url_for('download', filename='relatorio.xlsx', _external=True)
+        app.logger.debug(f"URL de download gerada: {download_url}")
+        return jsonify({"download_url": download_url})
+    except Exception as e:
+        app.logger.error(f"Erro ao gerar a URL de download: {e}")
+        return jsonify({"error": "Erro ao gerar a URL de download"}), 500
 
 @app.route('/download/<filename>')
 def download(filename):

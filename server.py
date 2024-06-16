@@ -56,24 +56,12 @@ def save_report():
     relatorio_path = os.path.join(UPLOAD_FOLDER, 'relatorio.xlsx')
     wb.save(relatorio_path)
 
-    # Log para ver se o caminho do arquivo está correto
-    app.logger.debug(f"Relatório salvo em: {relatorio_path}")
-
-    # Retornar o link do arquivo como uma resposta JSON
+    # Retornar o arquivo como um download
     try:
-        download_url = url_for('download', filename='relatorio.xlsx', _external=True)
-        app.logger.debug(f"URL de download gerada: {download_url}")
-        return jsonify({"download_url": download_url})
+        return send_file(relatorio_path, as_attachment=True)
     except Exception as e:
-        app.logger.error(f"Erro ao gerar a URL de download: {e}")
-        return jsonify({"error": "Erro ao gerar a URL de download"}), 500
-
-@app.route('/download/<filename>')
-def download(filename):
-    try:
-        return send_file(os.path.join(app.config['UPLOAD_FOLDER'], filename), as_attachment=True)
-    except FileNotFoundError:
-        return jsonify({"error": "File not found"}), 404
+        app.logger.error(f"Erro ao enviar arquivo para download: {e}")
+        return jsonify({"error": "Erro ao enviar arquivo para download"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))

@@ -12,7 +12,8 @@ ALLOWED_EXTENSIONS = {'xlsx'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return '.' in filename and \
+        filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def adjust_column_width(sheet):
     for col in sheet.columns:
@@ -58,12 +59,14 @@ def save_report():
     # Log para ver se o caminho do arquivo está correto
     app.logger.debug(f"Relatório salvo em: {relatorio_path}")
 
-    # Retornar o arquivo como um download
+    # Retornar o link do arquivo como uma resposta JSON
     try:
-        return send_file(relatorio_path, as_attachment=True)
+        download_url = url_for('download', filename='relatorio.xlsx', _external=True)
+        app.logger.debug(f"URL de download gerada: {download_url}")
+        return jsonify({"download_url": download_url})
     except Exception as e:
-        app.logger.error(f"Erro ao enviar arquivo para download: {e}")
-        return jsonify({"error": "Erro ao enviar arquivo para download"}), 500
+        app.logger.error(f"Erro ao gerar a URL de download: {e}")
+        return jsonify({"error": "Erro ao gerar a URL de download"}), 500
 
 @app.route('/download/<filename>')
 def download(filename):
@@ -73,6 +76,4 @@ def download(filename):
         return jsonify({"error": "File not found"}), 404
 
 if __name__ == '__main__':
-    # Certificados SSL
-    ssl_context = ('path/to/your/cert.pem', 'path/to/your/key.pem')
-    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)), ssl_context=ssl_context)
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))

@@ -61,7 +61,7 @@ def save_report():
 
     # Retornar o link do arquivo como uma resposta JSON
     try:
-        download_url = url_for('download', filename='relatorio.xlsx', _external=True)
+        download_url = url_for('download', filename='relatorio.xlsx', _external=True, _scheme='https')
         app.logger.debug(f"URL de download gerada: {download_url}")
         return jsonify({"download_url": download_url})
     except Exception as e:

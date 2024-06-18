@@ -2,11 +2,12 @@ from flask import Flask, request, send_file, jsonify, url_for
 from flask_cors import CORS
 from openpyxl import Workbook
 import os
-
+from flask_talisman import Talisman
 
 
 app = Flask(__name__)
 CORS(app)  # Habilitar CORS para todas as rotas
+Talisman(app)
 
 
 UPLOAD_FOLDER = 'uploads'
